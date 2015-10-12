@@ -1,12 +1,3 @@
-<p align="center" >
-  <a href="http://newspring.cc">
-    <img src="https://s3.amazonaws.com/ns.images/newspring/icons/newspring-church-logo-black.png" alt="NewSpring Church" title="NewSpring Church" />
-  </a>
-</p>
-
-Cybersource Library
--------------------
-
 A CyberSource plugin for Rock RMS: http://www.rockrms.com/
 
 Built with the Rock developer kit: https://github.com/SparkDevNetwork/RockKit
