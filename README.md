@@ -21,4 +21,3 @@ Installation:
 Please create an issue in this repository if you have issues.
 ______________________________________________
 
-The CyberSource Service Reference (ITransactionProcessor) is currently at v1.112. This can be updated by checking the CyberSource API status page: https://ics2wstest.ic3.com/commerce/1.x/transactionProcessor/
