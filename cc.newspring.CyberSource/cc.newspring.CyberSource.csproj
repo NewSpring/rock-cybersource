@@ -31,25 +31,28 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="DotLiquid">
-      <HintPath>..\RockWeb\Bin\DotLiquid.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
+    <ProjectReference Include="..\DotLiquid\DotLiquid.csproj">
+      <Project>{cb9372cd-9c1d-47ab-92d8-702d4d68324f}</Project>
+      <Name>DotLiquid</Name>
+    </ProjectReference>
     <Reference Include="EntityFramework">
       <HintPath>..\RockWeb\Bin\EntityFramework.dll</HintPath>
     </Reference>
     <Reference Include="EntityFramework.SqlServer">
       <HintPath>..\RockWeb\Bin\EntityFramework.SqlServer.dll</HintPath>
     </Reference>
-    <Reference Include="Rock">
-      <HintPath>..\RockWeb\Bin\Rock.dll</HintPath>
-    </Reference>
-    <Reference Include="Rock.Rest">
-      <HintPath>..\RockWeb\Bin\Rock.Rest.dll</HintPath>
-    </Reference>
-    <Reference Include="Rock.Version">
-      <HintPath>..\RockWeb\Bin\Rock.Version.dll</HintPath>
-    </Reference>
+    <ProjectReference Include="..\Rock\Rock.csproj">
+      <Project>{8f8c2a79-24f4-4157-8b99-45f75fa85799}</Project>
+      <Name>Rock</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Rock.Rest\Rock.Rest.csproj">
+      <Project>{B89DFD33-CE93-44E1-8616-C31ACDFE89CB}</Project>
+      <Name>Rock.Rest</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Rock.Version\Rock.Version.csproj">
+      <Project>{381A2FC8-6F4F-4B66-A9B4-14932D43B76A}</Project>
+      <Name>Rock.Version</Name>
+    </ProjectReference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
     <Reference Include="System.ComponentModel.DataAnnotations" />
@@ -121,7 +124,7 @@
   <PropertyGroup>
     <PostBuildEvent>xcopy /Y /R "$(SolutionDir)cc.newspring.CyberSource\bin\cc.newspring.CyberSource.dll" "$(SolutionDir)RockWeb\bin"</PostBuildEvent>
   </PropertyGroup>
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
   </Target>
