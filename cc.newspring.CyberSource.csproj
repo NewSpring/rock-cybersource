@@ -32,7 +32,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="DotLiquid">
-      <HintPath>..\Rock\DotLiquid\bin\Debug\DotLiquid.dll</HintPath>
+      <HintPath>..\rock\DotLiquid\bin\DotLiquid.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="EntityFramework, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
@@ -44,10 +44,10 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="Rock.Rest">
-      <HintPath>..\Rock\Rock.Rest\bin\Debug\Rock.Rest.dll</HintPath>
+      <HintPath>..\rock\Rock.Rest\bin\Rock.Rest.dll</HintPath>
     </Reference>
     <Reference Include="Rock.Version">
-      <HintPath>..\Rock\Rock.Version\bin\Debug\Rock.Version.dll</HintPath>
+      <HintPath>..\rock\Rock.Version\bin\Rock.Version.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
