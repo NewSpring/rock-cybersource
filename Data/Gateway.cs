@@ -121,46 +121,13 @@ namespace cc.newspring.CyberSource
             {
                 var financialGateway = origTransaction.FinancialGateway;
                 var request = GetMerchantInfo( financialGateway );
-                var payment = origTransaction.FinancialPaymentDetail;
-                var creditCardTypeGuid = new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_CREDIT_CARD );
-                var achTypeGuid = new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_ACH );
-                PaymentInfo paymentInfo = null;
-
-                if ( payment.CurrencyTypeValue.Guid.Equals(creditCardTypeGuid) )
-                {
-                    var cc = paymentInfo as CreditCardPaymentInfo;
-                    request.card = GetCard( cc );
-                }
-                else if ( payment.CurrencyTypeValue.Guid.Equals( achTypeGuid ) )
-                {
-                    var ach = paymentInfo as ACHPaymentInfo;
-                    request.check = GetCheck( ach );
-                }
-                else
-                {
-                    errorMessage = "Unsupported Currency Type Value";
-                    return null;
-                }
-
-                paymentInfo.Amount = amount;
-                request.purchaseTotals = GetTotals( paymentInfo );
-                request.billTo = GetBillTo( paymentInfo );
-                request.item = GetItems( paymentInfo );
-
-                if ( !paymentInfo.CurrencyTypeValue.Guid.Equals( new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_CREDIT_CARD ) ) )
-                {
-                    request.ecDebitService = new ECDebitService();
-                    request.ecDebitService.commerceIndicator = "internet";
-                    request.ecDebitService.run = "true";
-                }
-                else
-                {
-                    request.ccAuthService = new CCAuthService();
-                    request.ccAuthService.commerceIndicator = "internet";
-                    request.ccAuthService.run = "true";
-                    request.ccCaptureService = new CCCaptureService();
-                    request.ccCaptureService.run = "true";
-                }
+                request.ccCreditService = new CCCreditService {
+                    run = "true",
+                    captureRequestID = origTransaction.TransactionCode
+                };
+                
+                request.purchaseTotals = GetTotals();
+                request.purchaseTotals.grandTotalAmount = amount.ToString();
 
                 ReplyMessage reply = SubmitTransaction( financialGateway, request );
                 if ( reply != null )
@@ -216,7 +183,7 @@ namespace cc.newspring.CyberSource
             request.recurringSubscriptionInfo.amount = paymentInfo.Amount.ToString();
             request.paySubscriptionCreateService = new PaySubscriptionCreateService();
             request.paySubscriptionCreateService.run = "true";
-            request.purchaseTotals = GetTotals( paymentInfo );
+            request.purchaseTotals = GetTotals( );
             request.billTo = GetBillTo( paymentInfo );
             request.item = GetItems( paymentInfo );
 
@@ -270,7 +237,7 @@ namespace cc.newspring.CyberSource
                 return null;
             }
 
-            request.purchaseTotals = GetTotals( paymentInfo );
+            request.purchaseTotals = GetTotals( );
             request.billTo = GetBillTo( paymentInfo );
             request.item = GetItems( paymentInfo );
 
@@ -340,7 +307,7 @@ namespace cc.newspring.CyberSource
             request.recurringSubscriptionInfo.amount = paymentInfo.Amount.ToString();
             request.paySubscriptionCreateService = new PaySubscriptionCreateService();
             request.paySubscriptionCreateService.run = "true";
-            request.purchaseTotals = GetTotals( paymentInfo );
+            request.purchaseTotals = GetTotals();
             request.billTo = GetBillTo( paymentInfo );
             request.item = GetItems( paymentInfo );
 
@@ -420,7 +387,7 @@ namespace cc.newspring.CyberSource
             request.recurringSubscriptionInfo.amount = paymentInfo.Amount.ToString();
             request.paySubscriptionUpdateService = new PaySubscriptionUpdateService();
             request.paySubscriptionUpdateService.run = "true";
-            request.purchaseTotals = GetTotals( paymentInfo );
+            request.purchaseTotals = GetTotals();
             request.billTo = GetBillTo( paymentInfo );
             request.item = GetItems( paymentInfo );
 
@@ -922,7 +889,7 @@ namespace cc.newspring.CyberSource
         /// </summary>
         /// <param name="paymentInfo">The payment information.</param>
         /// <returns></returns>
-        private PurchaseTotals GetTotals( PaymentInfo paymentInfo )
+        private PurchaseTotals GetTotals( )
         {
             // paymentInfo not used here since fixed payment installments not implemented
             PurchaseTotals purchaseTotals = new PurchaseTotals();
