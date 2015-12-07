@@ -28,7 +28,6 @@ using System.Text.RegularExpressions;
 using cc.newspring.CyberSource.ITransactionProcessor;
 using Rock;
 using Rock.Attribute;
-using Rock.Extension;
 using Rock.Financial;
 using Rock.Model;
 using Rock.VersionInfo;
@@ -50,6 +49,8 @@ namespace cc.newspring.CyberSource
     [TimeField( "Batch Process Time", "The Batch processing cut-off time.  When batches are created by Rock, they will use this for the start/stop when creating new batches", false, "00:00:00", "", 5 )]
     public class Gateway : GatewayComponent
     {
+        private static string GATEWAY_RESPONSE_SUCCESS = "100";
+
         #region Gateway Component Implementation
 
         /// <summary>
@@ -81,7 +82,7 @@ namespace cc.newspring.CyberSource
             var creditCard = Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_CREDIT_CARD.AsGuid();
             var currencyTypeGuid = currencyType.Guid;
 
-            return currencyTypeGuid.Equals(ach) || currencyTypeGuid.Equals(creditCard);
+            return currencyTypeGuid.Equals( ach ) || currencyTypeGuid.Equals( creditCard );
         }
 
         /// <summary>
@@ -115,46 +116,57 @@ namespace cc.newspring.CyberSource
         {
             errorMessage = string.Empty;
 
-            if ( origTransaction != null &&
-                !string.IsNullOrWhiteSpace( origTransaction.TransactionCode ) &&
-                origTransaction.FinancialGateway != null )
+            if ( origTransaction == null )
             {
-                var financialGateway = origTransaction.FinancialGateway;
-                var request = GetMerchantInfo( financialGateway );
-                request.ccCreditService = new CCCreditService {
-                    run = "true",
-                    captureRequestID = origTransaction.TransactionCode
-                };
-                
-                request.purchaseTotals = GetTotals();
-                request.purchaseTotals.grandTotalAmount = amount.ToString();
-
-                ReplyMessage reply = SubmitTransaction( financialGateway, request );
-                if ( reply != null )
-                {
-                    if ( reply.reasonCode.Equals( "100" ) )  // SUCCESS
-                    {
-                        var transactionGuid = new Guid( reply.merchantReferenceCode );
-                        var transaction = new FinancialTransaction { Guid = transactionGuid };
-                        transaction.TransactionCode = reply.requestID;
-                        return transaction;
-                    }
-                    else
-                    {
-                        errorMessage = string.Format( "Your order was not approved.{0}", ProcessError( reply ) );
-                    }
-                }
-                else
-                {
-                    errorMessage = "Invalid response from the financial gateway.";
-                }
-            }
-            else
-            {
-                errorMessage = "Invalid original transaction, transaction code, or gateway.";
+                errorMessage = "Original transaction cannot be null";
+                return null;
             }
 
-            return null;
+            if ( string.IsNullOrWhiteSpace( origTransaction.TransactionCode ) )
+            {
+                errorMessage = "The transaction must have a TransactionCode to process a refund/credit";
+                return null;
+            }
+
+            if ( origTransaction.FinancialGateway == null )
+            {
+                errorMessage = "The transaction must have a FinancialGateway to process a refund/credit";
+                return null;
+            }
+
+            var financialGateway = origTransaction.FinancialGateway;
+            var request = GetMerchantInfo( financialGateway );
+
+            request.ccCreditService = new CCCreditService
+            {
+                run = "true",
+                captureRequestID = origTransaction.TransactionCode                
+            };
+
+            request.comments = comment;
+            request.purchaseTotals = GetTotals();
+            request.purchaseTotals.grandTotalAmount = amount.ToString();
+            var reply = SubmitTransaction( financialGateway, request );
+
+            if ( reply == null )
+            {
+                errorMessage = "Invalid response from the financial gateway.";
+                return null;
+            }
+
+            if ( !reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
+            {
+                errorMessage = string.Format( "Your order was not approved.{0}", ProcessError( reply ) );
+                return null;
+            }
+
+            var transactionGuid = new Guid( reply.merchantReferenceCode );
+            var transaction = new FinancialTransaction { 
+                Guid = transactionGuid,
+                TransactionCode = reply.requestID,
+                Summary = comment
+            };
+            return transaction;
         }
 
         /// <summary>
@@ -183,7 +195,7 @@ namespace cc.newspring.CyberSource
             request.recurringSubscriptionInfo.amount = paymentInfo.Amount.ToString();
             request.paySubscriptionCreateService = new PaySubscriptionCreateService();
             request.paySubscriptionCreateService.run = "true";
-            request.purchaseTotals = GetTotals( );
+            request.purchaseTotals = GetTotals();
             request.billTo = GetBillTo( paymentInfo );
             request.item = GetItems( paymentInfo );
 
@@ -201,7 +213,7 @@ namespace cc.newspring.CyberSource
             ReplyMessage reply = SubmitTransaction( financialGateway, request );
             if ( reply != null )
             {
-                if ( reply.reasonCode.Equals( "100" ) ) // SUCCESS
+                if ( reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
                 {
                     var transactionGuid = new Guid( reply.merchantReferenceCode );
                     var transaction = new FinancialTransaction { Guid = transactionGuid };
@@ -237,7 +249,7 @@ namespace cc.newspring.CyberSource
                 return null;
             }
 
-            request.purchaseTotals = GetTotals( );
+            request.purchaseTotals = GetTotals();
             request.billTo = GetBillTo( paymentInfo );
             request.item = GetItems( paymentInfo );
 
@@ -259,7 +271,7 @@ namespace cc.newspring.CyberSource
             ReplyMessage reply = SubmitTransaction( financialGateway, request );
             if ( reply != null )
             {
-                if ( reply.reasonCode.Equals( "100" ) )  // SUCCESS
+                if ( reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
                 {
                     var transactionGuid = new Guid( reply.merchantReferenceCode );
                     var transaction = new FinancialTransaction { Guid = transactionGuid };
@@ -325,7 +337,7 @@ namespace cc.newspring.CyberSource
             ReplyMessage reply = SubmitTransaction( financialGateway, request );
             if ( reply != null )
             {
-                if ( reply.reasonCode.Equals( "100" ) ) // SUCCESS
+                if ( reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
                 {
                     var transactionGuid = new Guid( reply.merchantReferenceCode );
                     var scheduledTransaction = new FinancialScheduledTransaction { Guid = transactionGuid };
@@ -404,7 +416,7 @@ namespace cc.newspring.CyberSource
             ReplyMessage reply = SubmitTransaction( financialGateway, request );
             if ( reply != null )
             {
-                if ( reply.reasonCode.Equals( "100" ) ) // SUCCESS
+                if ( reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
                 {
                     return true;
                 }
@@ -441,7 +453,7 @@ namespace cc.newspring.CyberSource
             ReplyMessage reply = SubmitTransaction( financialGateway, request );
             if ( reply != null )
             {
-                if ( reply.reasonCode.Equals( "100" ) ) // SUCCESS
+                if ( reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
                 {
                     return true;
                 }
@@ -475,7 +487,7 @@ namespace cc.newspring.CyberSource
             verifyRequest.recurringSubscriptionInfo.subscriptionID = transaction.TransactionCode;
 
             ReplyMessage verifyReply = SubmitTransaction( financialGateway, verifyRequest );
-            if ( verifyReply.reasonCode.Equals( "100" ) ) // SUCCESS
+            if ( verifyReply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
             {
                 transaction.IsActive = verifyReply.paySubscriptionRetrieveReply.status.ToUpper() == "CURRENT";
                 var startDate = GetDate( verifyReply.paySubscriptionRetrieveReply.startDate );
@@ -574,7 +586,7 @@ namespace cc.newspring.CyberSource
             request.paySubscriptionCreateService.paymentRequestID = transaction.TransactionCode;
 
             ReplyMessage reply = SubmitTransaction( financialGateway, request );
-            if ( reply.reasonCode == "100" ) // SUCCESS
+            if ( reply.reasonCode == GATEWAY_RESPONSE_SUCCESS )
             {
                 return reply.paySubscriptionCreateReply.subscriptionID;
             }
@@ -887,9 +899,8 @@ namespace cc.newspring.CyberSource
         /// <summary>
         /// Gets the purchase totals.
         /// </summary>
-        /// <param name="paymentInfo">The payment information.</param>
         /// <returns></returns>
-        private PurchaseTotals GetTotals( )
+        private PurchaseTotals GetTotals()
         {
             // paymentInfo not used here since fixed payment installments not implemented
             PurchaseTotals purchaseTotals = new PurchaseTotals();
