@@ -827,20 +827,38 @@ namespace cc.newspring.CyberSource
         private BillTo GetBillTo( PaymentInfo paymentInfo )
         {
             BillTo billingInfo = new BillTo();
+
+            if( paymentInfo.Phone == null )
+            {
+                paymentInfo.Phone = string.Empty;
+            }
+
+            if ( paymentInfo is CreditCardPaymentInfo )
+            {
+                var cc = paymentInfo as CreditCardPaymentInfo;
+                billingInfo.street1 = cc.BillingStreet1.Left(50);
+                billingInfo.city = cc.BillingCity.Left(50);
+                billingInfo.state = cc.BillingState.Left(2);
+                billingInfo.postalCode = cc.BillingPostalCode.Left(10);
+            }
+            else
+            {
+                billingInfo.street1 = paymentInfo.Street1.Left(50);           // up to 50 chars
+                billingInfo.city = paymentInfo.City.Left(50);                 // up to 50 chars
+                billingInfo.state = paymentInfo.State.Left(2);                // only 2 chars
+
+                var zip = paymentInfo.PostalCode;
+                if (!string.IsNullOrWhiteSpace(zip) && zip.Length > 5)
+                {
+                    Regex.Replace(zip, @"^(.{5})(.{4})$", "$1-$2");           // up to 9 chars with a separating -
+                }
+                billingInfo.postalCode = zip;
+            }
+
             billingInfo.firstName = paymentInfo.FirstName.Left( 50 );       // up to 50 chars
             billingInfo.lastName = paymentInfo.LastName.Left( 60 );         // up to 60 chars
             billingInfo.email = paymentInfo.Email;                          // up to 255 chars
             billingInfo.phoneNumber = paymentInfo.Phone.Left( 15 );         // up to 15 chars
-            billingInfo.street1 = paymentInfo.Street1.Left( 50 );           // up to 50 chars
-            billingInfo.city = paymentInfo.City.Left( 50 );                 // up to 50 chars
-            billingInfo.state = paymentInfo.State.Left( 2 );                // only 2 chars
-
-            var zip = paymentInfo.PostalCode;
-            if ( !string.IsNullOrWhiteSpace( zip ) && zip.Length > 5 )
-            {
-                Regex.Replace( zip, @"^(.{5})(.{4})$", "$1-$2" );           // up to 9 chars with a separating -
-            }
-            billingInfo.postalCode = zip;
 
             var country = paymentInfo.Country ?? "US";
             billingInfo.country = country.Left( 2 );                        // only 2 chars
@@ -848,15 +866,6 @@ namespace cc.newspring.CyberSource
             var ipAddr = Dns.GetHostEntry( Dns.GetHostName() ).AddressList
                 .FirstOrDefault( ip => ip.AddressFamily == AddressFamily.InterNetwork );
             billingInfo.ipAddress = ipAddr.ToString();                      // machine IP address
-
-            if ( paymentInfo is CreditCardPaymentInfo )
-            {
-                var cc = paymentInfo as CreditCardPaymentInfo;
-                billingInfo.street1 = cc.BillingStreet1.Left( 50 );
-                billingInfo.city = cc.BillingCity.Left( 50 );
-                billingInfo.state = cc.BillingState.Left( 2 );
-                billingInfo.postalCode = cc.BillingPostalCode.Left( 10 );
-            }
 
             return billingInfo;
         }
