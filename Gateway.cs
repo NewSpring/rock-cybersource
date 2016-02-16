@@ -41,35 +41,19 @@ namespace cc.newspring.CyberSource
     [Description( "CyberSource Payment Gateway" )]
     [Export( typeof( GatewayComponent ) )]
     [ExportMetadata( "ComponentName", "CyberSource" )]
-    [TextField( "Merchant ID", "The CyberSource merchant ID (case-sensitive)", true, "", "", 0, "MerchantID" )]
-    [MemoField( "Transaction Key", "The CyberSource transaction key", true, "", "", 0, "TransactionKey" )]
-    [TextField( "Report User", "The CyberSource reporting user (case-sensitive)", true, "", "", 0, "ReportUser" )]
-    [TextField( "Report Password", "The CyberSource reporting password (case-sensitive)", true, "", "", 0, "ReportPassword" )]
-    [CustomRadioListField( "Mode", "Mode to use for transactions", "Live,Test", true, "Live", "", 4 )]
-    [TimeField( "Batch Process Time", "The Batch processing cut-off time.  When batches are created by Rock, they will use this for the start/stop when creating new batches", false, "00:00:00", "", 5 )]
+    [TextField( "Merchant ID", "The CyberSource merchant ID (case-sensitive)", true, order: 0 )]
+    [BooleanField( "Use Live Mode", "Select Yes to send transactions to the Live Business Center.  Select No to send transactions to the Test Business Center.", true, order: 1 )]
+    [MemoField( "Live Transaction Key", "The CyberSource live business transaction key", true, order: 2 )]
+    [MemoField( "Test Transaction Key", "The CyberSource test business transaction key", true, order: 3 )]
+    [TextField( "Report User", "The CyberSource reporting user (case-sensitive)", true, "", "", 4 )]
+    [TextField( "Report Password", "The CyberSource reporting password (case-sensitive)", true, "", "", 5 )]
     public class Gateway : GatewayComponent
     {
         private static string GATEWAY_RESPONSE_SUCCESS = "100";
+        private static string LIVE_GATEWAY_URL = "https://ics2ws.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.112.wsdl";
+        private static string TEST_GATEWAY_URL = "https://ics2wstest.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.112.wsdl";
 
         #region Gateway Component Implementation
-
-        /// <summary>
-        /// Gets the gateway URL.
-        /// </summary>
-        /// <value>
-        /// The gateway URL.
-        /// </value>
-        private string GetGatewayUrl( FinancialGateway financialGateway )
-        {
-            if ( GetAttributeValue( financialGateway, "Mode" ).Equals( "Live", StringComparison.CurrentCultureIgnoreCase ) )
-            {
-                return "https://ics2ws.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.112.wsdl";
-            }
-            else
-            {
-                return "https://ics2wstest.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.112.wsdl";
-            }
-        }
 
         /// <summary>
         /// Determines if this gateway supports saved accounts of the type indicated by currencyType
@@ -83,6 +67,17 @@ namespace cc.newspring.CyberSource
             var currencyTypeGuid = currencyType.Guid;
 
             return currencyTypeGuid.Equals( ach ) || currencyTypeGuid.Equals( creditCard );
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether gateway provider needs first and last name on credit card as two distinct fields.
+        /// </summary>
+        /// <value>
+        ///   <c>true</c> if [split name on card]; otherwise, <c>false</c>.
+        /// </value>
+        public override bool SplitNameOnCard
+        {
+            get { return true; }
         }
 
         /// <summary>
@@ -140,7 +135,7 @@ namespace cc.newspring.CyberSource
             request.ccCreditService = new CCCreditService
             {
                 run = "true",
-                captureRequestID = origTransaction.TransactionCode                
+                captureRequestID = origTransaction.TransactionCode
             };
 
             request.comments = comment;
@@ -161,7 +156,8 @@ namespace cc.newspring.CyberSource
             }
 
             var transactionGuid = new Guid( reply.merchantReferenceCode );
-            var transaction = new FinancialTransaction { 
+            var transaction = new FinancialTransaction
+            {
                 Guid = transactionGuid,
                 TransactionCode = reply.requestID,
                 Summary = comment
@@ -404,7 +400,7 @@ namespace cc.newspring.CyberSource
             request.item = GetItems( paymentInfo );
 
             request.subscription = new Subscription();
-            if ( !paymentInfo.CurrencyTypeValue.Guid.Equals( new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_CREDIT_CARD ) ) )
+            if ( paymentInfo.CurrencyTypeValue.Guid.Equals( new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_ACH ) ) )
             {
                 request.subscription.paymentMethod = "check";
             }
@@ -623,7 +619,9 @@ namespace cc.newspring.CyberSource
         {
             ReplyMessage reply = new ReplyMessage();
             string merchantID = GetAttributeValue( financialGateway, "MerchantID" );
-            string transactionkey = GetAttributeValue( financialGateway, "TransactionKey" );
+            string liveTransactionkey = GetAttributeValue( financialGateway, "LiveTransactionKey" );
+            string testTransactionkey = GetAttributeValue( financialGateway, "TestTransactionKey" );
+            bool useLiveMode = GetAttributeValue( financialGateway, "UseLiveMode" ).AsBoolean();
 
             BasicHttpBinding binding = new BasicHttpBinding();
             binding.Name = "ITransactionProcessor";
@@ -635,11 +633,11 @@ namespace cc.newspring.CyberSource
             binding.ReaderQuotas.MaxBytesPerRead = 2147483647;
             binding.ReaderQuotas.MaxStringContentLength = 2147483647;
             binding.Security.Mode = BasicHttpSecurityMode.TransportWithMessageCredential;
-            EndpointAddress address = new EndpointAddress( new Uri( GetGatewayUrl( financialGateway ) ) );
+            EndpointAddress address = new EndpointAddress( useLiveMode ? LIVE_GATEWAY_URL : TEST_GATEWAY_URL );
 
             var proxy = new TransactionProcessorClient( binding, address );
             proxy.ClientCredentials.UserName.UserName = merchantID;
-            proxy.ClientCredentials.UserName.Password = transactionkey;
+            proxy.ClientCredentials.UserName.Password = useLiveMode ? liveTransactionkey : testTransactionkey;
             proxy.Endpoint.Address = address;
             proxy.Endpoint.Binding = binding;
 
@@ -828,7 +826,7 @@ namespace cc.newspring.CyberSource
         {
             BillTo billingInfo = new BillTo();
 
-            if( paymentInfo.Phone == null )
+            if ( paymentInfo.Phone == null )
             {
                 paymentInfo.Phone = string.Empty;
             }
@@ -836,27 +834,29 @@ namespace cc.newspring.CyberSource
             if ( paymentInfo is CreditCardPaymentInfo )
             {
                 var cc = paymentInfo as CreditCardPaymentInfo;
-                billingInfo.street1 = cc.BillingStreet1.Left(50);
-                billingInfo.city = cc.BillingCity.Left(50);
-                billingInfo.state = cc.BillingState.Left(2);
-                billingInfo.postalCode = cc.BillingPostalCode.Left(10);
+                billingInfo.street1 = cc.BillingStreet1.Left( 50 );
+                billingInfo.city = cc.BillingCity.Left( 50 );
+                billingInfo.state = cc.BillingState.Left( 2 );
+                billingInfo.postalCode = cc.BillingPostalCode.Left( 10 );
+                billingInfo.firstName = cc.NameOnCard;
+                billingInfo.lastName = cc.LastNameOnCard;
             }
             else
             {
-                billingInfo.street1 = paymentInfo.Street1.Left(50);           // up to 50 chars
-                billingInfo.city = paymentInfo.City.Left(50);                 // up to 50 chars
-                billingInfo.state = paymentInfo.State.Left(2);                // only 2 chars
+                billingInfo.firstName = paymentInfo.FirstName;
+                billingInfo.lastName = paymentInfo.LastName;
+                billingInfo.street1 = paymentInfo.Street1.Left( 50 );           // up to 50 chars
+                billingInfo.city = paymentInfo.City.Left( 50 );                 // up to 50 chars
+                billingInfo.state = paymentInfo.State.Left( 2 );                // only 2 chars
 
                 var zip = paymentInfo.PostalCode;
-                if (!string.IsNullOrWhiteSpace(zip) && zip.Length > 5)
+                if ( !string.IsNullOrWhiteSpace( zip ) && zip.Length > 5 )
                 {
-                    Regex.Replace(zip, @"^(.{5})(.{4})$", "$1-$2");           // up to 9 chars with a separating -
+                    Regex.Replace( zip, @"^(.{5})(.{4})$", "$1-$2" );           // up to 9 chars with a separating -
                 }
                 billingInfo.postalCode = zip;
             }
 
-            billingInfo.firstName = paymentInfo.FirstName.Left( 50 );       // up to 50 chars
-            billingInfo.lastName = paymentInfo.LastName.Left( 60 );         // up to 60 chars
             billingInfo.email = paymentInfo.Email;                          // up to 255 chars
             billingInfo.phoneNumber = paymentInfo.Phone.Left( 15 );         // up to 15 chars
 
