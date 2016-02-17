@@ -30,6 +30,7 @@ using Rock;
 using Rock.Attribute;
 using Rock.Financial;
 using Rock.Model;
+using Rock.Security;
 using Rock.VersionInfo;
 using Rock.Web.Cache;
 
@@ -67,17 +68,6 @@ namespace cc.newspring.CyberSource
             var currencyTypeGuid = currencyType.Guid;
 
             return currencyTypeGuid.Equals( ach ) || currencyTypeGuid.Equals( creditCard );
-        }
-
-        /// <summary>
-        /// Gets a value indicating whether gateway provider needs first and last name on credit card as two distinct fields.
-        /// </summary>
-        /// <value>
-        ///   <c>true</c> if [split name on card]; otherwise, <c>false</c>.
-        /// </value>
-        public override bool SplitNameOnCard
-        {
-            get { return true; }
         }
 
         /// <summary>
@@ -129,19 +119,43 @@ namespace cc.newspring.CyberSource
                 return null;
             }
 
-            var financialGateway = origTransaction.FinancialGateway;
-            var request = GetMerchantInfo( financialGateway );
-
-            request.ccCreditService = new CCCreditService
+            if ( origTransaction.FinancialPaymentDetail == null || origTransaction.FinancialPaymentDetail.CurrencyTypeValue == null )
             {
-                run = "true",
-                captureRequestID = origTransaction.TransactionCode
-            };
+                errorMessage = "The transaction must have a payment detail and currency to process a refund/credit";
+                return null;
+            }
+
+            var creditCardTypeGuid = new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_CREDIT_CARD );
+            var achTypeGuid = new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_ACH );
+            var request = GetMerchantInfo( origTransaction.FinancialGateway );
+            var paymentDetail = origTransaction.FinancialPaymentDetail;
+
+            if ( paymentDetail.CurrencyTypeValue.Guid.Equals( creditCardTypeGuid ) )
+            {
+                request.ccCreditService = new CCCreditService
+                {
+                    run = "true",
+                    captureRequestID = origTransaction.TransactionCode
+                };
+            }
+            else if ( paymentDetail.CurrencyTypeValue.Guid.Equals( achTypeGuid ) )
+            {
+                request.ecCreditService = new ECCreditService
+                {
+                    run = "true",
+                    debitRequestID = origTransaction.TransactionCode
+                };
+            }
+            else
+            {
+                errorMessage = "Unsupported Currency Type Value";
+                return null;
+            }
 
             request.comments = comment;
             request.purchaseTotals = GetTotals();
             request.purchaseTotals.grandTotalAmount = amount.ToString();
-            var reply = SubmitTransaction( financialGateway, request );
+            var reply = SubmitTransaction( origTransaction.FinancialGateway, request );
 
             if ( reply == null )
             {
@@ -151,7 +165,7 @@ namespace cc.newspring.CyberSource
 
             if ( !reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
             {
-                errorMessage = string.Format( "Your order was not approved.{0}", ProcessError( reply ) );
+                errorMessage = string.Format( "Your credit was not approved. {0}", ProcessError( reply ) );
                 return null;
             }
 
@@ -831,6 +845,8 @@ namespace cc.newspring.CyberSource
                 paymentInfo.Phone = string.Empty;
             }
 
+            billingInfo.firstName = paymentInfo.FirstName;
+            billingInfo.lastName = paymentInfo.LastName;
             if ( paymentInfo is CreditCardPaymentInfo )
             {
                 var cc = paymentInfo as CreditCardPaymentInfo;
@@ -838,13 +854,16 @@ namespace cc.newspring.CyberSource
                 billingInfo.city = cc.BillingCity.Left( 50 );
                 billingInfo.state = cc.BillingState.Left( 2 );
                 billingInfo.postalCode = cc.BillingPostalCode.Left( 10 );
-                billingInfo.firstName = cc.NameOnCard;
-                billingInfo.lastName = cc.LastNameOnCard;
+
+                var nameOnCard = cc.NameOnCard.Split( ' ' );
+                if ( nameOnCard != null && nameOnCard.Count() >= 2 )
+                {
+                    billingInfo.firstName = nameOnCard.First();
+                    billingInfo.lastName = nameOnCard.Last();
+                }
             }
             else
             {
-                billingInfo.firstName = paymentInfo.FirstName;
-                billingInfo.lastName = paymentInfo.LastName;
                 billingInfo.street1 = paymentInfo.Street1.Left( 50 );           // up to 50 chars
                 billingInfo.city = paymentInfo.City.Left( 50 );                 // up to 50 chars
                 billingInfo.state = paymentInfo.State.Left( 2 );                // only 2 chars
@@ -879,8 +898,23 @@ namespace cc.newspring.CyberSource
         {
             BillTo billingInfo = new BillTo();
             billingInfo.customerID = transaction.AuthorizedPersonAlias.Id.ToString();
+
+            // set the default name in case there isn't an encrypted one
             billingInfo.firstName = transaction.AuthorizedPersonAlias.Person.FirstName.Left( 50 );       // up to 50 chars
             billingInfo.lastName = transaction.AuthorizedPersonAlias.Person.LastName.Left( 50 );         // up to 60 chars
+
+            // check for an encrypted name that would signify a different name on card
+            var nameOnCardEncrypted = transaction.FinancialPaymentDetail.NameOnCardEncrypted.ToStringSafe();
+            if ( nameOnCardEncrypted != null )
+            {
+                var nameOnCard = Encryption.DecryptString( nameOnCardEncrypted );
+                if ( nameOnCard != null && nameOnCard.Split( ' ' ).Count() >= 2 )
+                {
+                    billingInfo.firstName = nameOnCard.Split( ' ' ).First();
+                    billingInfo.lastName = nameOnCard.Split( ' ' ).Last();
+                }
+            }
+
             billingInfo.email = transaction.AuthorizedPersonAlias.Person.Email.Left( 255 );              // up to 255 chars
             billingInfo.ipAddress = Dns.GetHostEntry( Dns.GetHostName() )
                 .AddressList.FirstOrDefault( ip => ip.AddressFamily == AddressFamily.InterNetwork ).ToString();
