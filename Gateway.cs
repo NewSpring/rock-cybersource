@@ -263,7 +263,7 @@ namespace cc.newspring.CyberSource
             request.billTo = GetBillTo( paymentInfo );
             request.item = GetItems( paymentInfo );
 
-            if ( !paymentInfo.CurrencyTypeValue.Guid.Equals( new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_CREDIT_CARD ) ) )
+            if ( paymentInfo.CurrencyTypeValue.Guid.Equals( new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_ACH ) ) )
             {
                 request.ecDebitService = new ECDebitService();
                 request.ecDebitService.commerceIndicator = "internet";
@@ -290,7 +290,10 @@ namespace cc.newspring.CyberSource
                 }
                 else
                 {
-                    errorMessage = string.Format( "Your order was not approved.{0}", ProcessError( reply ) );
+                    bool authorizationReversed = ReverseAuthorization( financialGateway, reply.requestID, request.purchaseTotals.grandTotalAmount );
+
+                    // add a message if the authorization isn't reversed?
+                    errorMessage = string.Format( "Your order was not approved. {0}", ProcessError( reply ) );
                 }
             }
             else
@@ -829,6 +832,31 @@ namespace cc.newspring.CyberSource
             }
 
             return request;
+        }
+
+        /// <summary>
+        /// Reverses the authorization.
+        /// </summary>
+        /// <param name="financialGateway">The financial gateway.</param>
+        /// <param name="originalRequest">The original request.</param>
+        /// <returns></returns>
+        private bool ReverseAuthorization( FinancialGateway financialGateway, string requestID, string totalAmount )
+        {
+            RequestMessage request = GetMerchantInfo( financialGateway );
+            request.ccAuthReversalService = new CCAuthReversalService();
+            request.ccAuthReversalService.authRequestID = requestID;
+            request.ccAuthReversalService.run = "true";
+            request.purchaseTotals = new PurchaseTotals();
+            request.purchaseTotals.currency = "USD";
+            request.purchaseTotals.grandTotalAmount = totalAmount;
+
+            ReplyMessage reply = SubmitTransaction( financialGateway, request );
+            if ( reply.reasonCode == GATEWAY_RESPONSE_SUCCESS )
+            {
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
