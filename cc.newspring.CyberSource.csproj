@@ -85,10 +85,6 @@
     <None Include="Service References\ITransactionProcessor\cc.newspring.CyberSource.ITransactionProcessor.ReplyMessage.datasource">
       <DependentUpon>Reference.svcmap</DependentUpon>
     </None>
-    <None Include="Service References\ITransactionProcessor\CyberSourceTransactionWS.wsdl" />
-    <None Include="Service References\ITransactionProcessor\CyberSourceTransaction_1.xsd">
-      <SubType>Designer</SubType>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <WCFMetadata Include="Service References\" />
@@ -103,6 +99,14 @@
     <None Include="Service References\ITransactionProcessor\configuration.svcinfo" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Service References\ITransactionProcessor\CyberSourceTransactionWS1.wsdl" />
+    <None Include="Service References\ITransactionProcessor\CyberSourceTransactionWS11.wsdl" />
+    <None Include="Service References\ITransactionProcessor\CyberSourceTransaction_11.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ITransactionProcessor\CyberSourceTransaction_111.xsd">
+      <SubType>Designer</SubType>
+    </None>
     <None Include="Service References\ITransactionProcessor\Reference.svcmap">
       <Generator>WCF Proxy Generator</Generator>
       <LastGenOutput>Reference.cs</LastGenOutput>
@@ -130,7 +134,7 @@
   <PropertyGroup>
     <PostBuildEvent>xcopy /Y /R "$(ProjectDir)bin\cc.newspring.CyberSource.dll" "$(SolutionDir)RockWeb\bin"</PostBuildEvent>
   </PropertyGroup>
-    <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
   </Target>
