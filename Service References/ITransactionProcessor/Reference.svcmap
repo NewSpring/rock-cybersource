@@ -6,7 +6,7 @@
     <EnableDataBinding>true</EnableDataBinding>
     <ExcludedTypes />
     <ImportXmlTypes>false</ImportXmlTypes>
-    <GenerateInternalTypes>false</GenerateInternalTypes>
+    <GenerateInternalTypes>true</GenerateInternalTypes>
     <GenerateMessageContracts>false</GenerateMessageContracts>
     <NamespaceMappings />
     <CollectionMappings />
@@ -19,11 +19,11 @@
     <ServiceContractMappings />
   </ClientOptions>
   <MetadataSources>
-    <MetadataSource Address="https://ics2ws.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.112.wsdl" Protocol="http" SourceId="1" />
+    <MetadataSource Address="https://ics2wsa.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.127.wsdl" Protocol="http" SourceId="1" />
   </MetadataSources>
   <Metadata>
-    <MetadataFile FileName="CyberSourceTransactionWS.wsdl" MetadataType="Wsdl" ID="45fd15a4-f6e9-47ab-a320-d30598134fa9" SourceId="1" SourceUrl="https://ics2ws.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.112.wsdl" />
-    <MetadataFile FileName="CyberSourceTransaction_1.xsd" MetadataType="Schema" ID="d9c7774e-a2df-4c4d-914e-7777a5314214" SourceId="1" SourceUrl="https://ics2ws.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.112.xsd" />
+    <MetadataFile FileName="CyberSourceTransaction_111.xsd" MetadataType="Schema" ID="58deb48b-44a2-480f-beb6-b473cce5b64f" SourceId="1" SourceUrl="https://ics2wsa.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.127.xsd" />
+    <MetadataFile FileName="CyberSourceTransactionWS11.wsdl" MetadataType="Wsdl" ID="84bc8f6d-3048-4d3d-87c0-d64486511c8f" SourceId="1" SourceUrl="https://ics2wsa.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.127.wsdl" />
   </Metadata>
   <Extensions>
     <ExtensionFile FileName="configuration91.svcinfo" Name="configuration91.svcinfo" />
