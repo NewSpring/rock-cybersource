@@ -46,8 +46,8 @@ namespace cc.newspring.CyberSource
     [TextField( "Report User", "The CyberSource reporting user (case-sensitive)", true, "", "", 2, "ReportUser" )]
     [TextField( "Report Password", "The CyberSource reporting password (case-sensitive)", true, "", "", 3, "ReportPassword" )]
     [CustomRadioListField( "Mode", "Mode to use for transactions", "Live,Test", true, "Live", "", 4 )]
-    [TextField( "Live Gateway URL", "The CyberSource endpoint url to use for live transactions", true, "https://ics2wsa.ic3.com/commerce/1.x/transactionProcessor/", "", 5, "ReportUser" )]
-    [TextField( "Test Gateway URL", "The CyberSource endpoint url to use for test transactions", true, "https://ics2wstesta.ic3.com/commerce/1.x/transactionProcessor/", "", 6, "ReportUser" )]
+    [TextField( "Live Gateway URL", "The CyberSource endpoint url to use for live transactions", true, "https://ics2wsa.ic3.com/commerce/1.x/transactionProcessor/", "", 5 )]
+    [TextField( "Test Gateway URL", "The CyberSource endpoint url to use for test transactions", true, "https://ics2wstesta.ic3.com/commerce/1.x/transactionProcessor/", "", 6 )]
     [BooleanField( "Prompt for Name On Card", "Should users be prompted to enter name on the card", false, "", 7, "PromptForName" )]
     [BooleanField( "Prompt for Bank Account Name", "Should users be prompted to enter a name for the bank account (in addition to routing and account numbers).", true, "", 8, "PromptForBankAccountName" )]
     [BooleanField( "Prompt for Billing Address", "Should users be prompted to enter billing address", false, "", 9, "PromptForAddress" )]
@@ -800,11 +800,11 @@ namespace cc.newspring.CyberSource
             string gatewayEndpoint = null;
             if ( GetAttributeValue( financialGateway, "Mode" ).Equals( "Live", StringComparison.CurrentCultureIgnoreCase ) )
             {
-                gatewayEndpoint = GetAttributeValue( financialGateway, "LiveGatewayUrl" );
+                gatewayEndpoint = GetAttributeValue( financialGateway, "LiveGatewayURL" );
             }
             else
             {
-                gatewayEndpoint = GetAttributeValue( financialGateway, "TestGatewayUrl" );
+                gatewayEndpoint = GetAttributeValue( financialGateway, "TestGatewayURL" );
             }
 
             EndpointAddress address = null;
