@@ -810,7 +810,8 @@ namespace cc.newspring.CyberSource
             EndpointAddress address = null;
             if ( !string.IsNullOrEmpty( gatewayEndpoint ) )
             {
-                address = new EndpointAddress( string.Format( "{0}/CyberSourceTransaction_{1}", gatewayEndpoint, GATEWAY_VERSION ) );
+                gatewayEndpoint = gatewayEndpoint.EnsureTrailingForwardslash();
+                address = new EndpointAddress( string.Format( "{0}CyberSourceTransaction_{1}", gatewayEndpoint, GATEWAY_VERSION ) );
             }
             else
             {
