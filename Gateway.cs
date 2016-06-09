@@ -50,7 +50,7 @@ namespace cc.newspring.CyberSource
     [TextField( "Test Gateway URL", "The CyberSource endpoint url to use for test transactions", true, "https://ics2wstesta.ic3.com/commerce/1.x/transactionProcessor/", "", 6 )]
     [BooleanField( "Prompt for Name On Card", "Should users be prompted to enter name on the card", false, "", 7, "PromptForName" )]
     [BooleanField( "Prompt for Bank Account Name", "Should users be prompted to enter a name for the bank account (in addition to routing and account numbers).", true, "", 8, "PromptForBankAccountName" )]
-    [BooleanField( "Prompt for Billing Address", "Should users be prompted to enter billing address", false, "", 9, "PromptForAddress" )]
+    [BooleanField( "Prompt for Billing Address", "Should users be prompted to enter billing address", true, "", 9, "PromptForAddress" )]
     public class Gateway : GatewayComponent
     {
         private static string GATEWAY_RESPONSE_SUCCESS = "100";
@@ -198,7 +198,7 @@ namespace cc.newspring.CyberSource
             }
             else if ( string.IsNullOrEmpty( errorMessage ) )
             {
-                errorMessage = string.Format( "Your order was not approved.{0}", ProcessError( reply ) );
+                errorMessage = string.Format( "Unable to credit this transaction.{0}", ProcessError( reply ) );
             }
 
             return null;
@@ -256,7 +256,7 @@ namespace cc.newspring.CyberSource
             }
             else if ( string.IsNullOrEmpty( errorMessage ) )
             {
-                errorMessage = string.Format( "Your order was not approved.{0}", ProcessError( reply ) );
+                errorMessage = string.Format( "Unable to authorize this transaction.{0}", ProcessError( reply ) );
             }
 
             return null;
@@ -308,7 +308,7 @@ namespace cc.newspring.CyberSource
             }
             else if ( string.IsNullOrEmpty( errorMessage ) )
             {
-                errorMessage = string.Format( "Your order was not approved.{0}", ProcessError( reply ) );
+                errorMessage = string.Format( "Unable to process this order.{0}", ProcessError( reply ) );
             }
 
             return null;
@@ -688,10 +688,10 @@ namespace cc.newspring.CyberSource
                     return "\nOnly a partial amount of this transaction was approved.";
                 // General system failure
                 case 150:
-                    return "\nThe payment processor did not process your payment.";
+                    return string.Format( "\nThe payment processor did not process your payment. {0}", reply.additionalData );
                 // System timeout
                 case 151:
-                    return "\nThe payment request timed out.";
+                    return string.Format( "\nThe payment request timed out. {0}", reply.additionalData ); ;
                 // Service request timed out
                 case 152:
                     return "\nThe payment service timed out.";
@@ -748,7 +748,7 @@ namespace cc.newspring.CyberSource
                     return "\nThe payment request was received but has not yet been processed.";
                 // Any others not identified
                 default:
-                    return "\nYour payment was not processed.  Please check your payment details.";
+                    return string.Format( "\nYour payment was not processed. {0}", reply.additionalData );
             }
         }
 
