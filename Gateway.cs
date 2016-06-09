@@ -30,7 +30,6 @@ using Rock;
 using Rock.Attribute;
 using Rock.Financial;
 using Rock.Model;
-using Rock.Security;
 using Rock.VersionInfo;
 using Rock.Web.Cache;
 
@@ -42,19 +41,71 @@ namespace cc.newspring.CyberSource
     [Description( "CyberSource Payment Gateway" )]
     [Export( typeof( GatewayComponent ) )]
     [ExportMetadata( "ComponentName", "CyberSource" )]
-    [TextField( "Merchant ID", "The CyberSource merchant ID (case-sensitive)", true, order: 0 )]
-    [BooleanField( "Use Live Mode", "Select Yes to send transactions to the Live Business Center.  Select No to send transactions to the Test Business Center.", true, order: 1 )]
-    [MemoField( "Live Transaction Key", "The CyberSource live business transaction key", true, order: 2 )]
-    [MemoField( "Test Transaction Key", "The CyberSource test business transaction key", true, order: 3 )]
-    [TextField( "Report User", "The CyberSource reporting user (case-sensitive)", true, "", "", 4 )]
-    [TextField( "Report Password", "The CyberSource reporting password (case-sensitive)", true, "", "", 5 )]
+    [TextField( "Merchant ID", "The CyberSource merchant ID (case-sensitive)", true, "", "", 0, "MerchantID" )]
+    [MemoField( "Transaction Key", "The CyberSource transaction key", true, "", "", 0, "TransactionKey", 1 )]
+    [TextField( "Report User", "The CyberSource reporting user (case-sensitive)", true, "", "", 2, "ReportUser" )]
+    [TextField( "Report Password", "The CyberSource reporting password (case-sensitive)", true, "", "", 3, "ReportPassword" )]
+    [CustomRadioListField( "Mode", "Mode to use for transactions", "Live,Test", true, "Live", "", 4 )]
+    [TextField( "Live Gateway URL", "The CyberSource endpoint url to use for live transactions", true, "https://ics2wsa.ic3.com/commerce/1.x/transactionProcessor/", "", 5 )]
+    [TextField( "Test Gateway URL", "The CyberSource endpoint url to use for test transactions", true, "https://ics2wstesta.ic3.com/commerce/1.x/transactionProcessor/", "", 6 )]
+    [BooleanField( "Prompt for Name On Card", "Should users be prompted to enter name on the card", false, "", 7, "PromptForName" )]
+    [BooleanField( "Prompt for Bank Account Name", "Should users be prompted to enter a name for the bank account (in addition to routing and account numbers).", true, "", 8, "PromptForBankAccountName" )]
+    [BooleanField( "Prompt for Billing Address", "Should users be prompted to enter billing address", true, "", 9, "PromptForAddress" )]
     public class Gateway : GatewayComponent
     {
         private static string GATEWAY_RESPONSE_SUCCESS = "100";
-        private static string LIVE_GATEWAY_URL = "https://ics2ws.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.112.wsdl";
-        private static string TEST_GATEWAY_URL = "https://ics2wstest.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.112.wsdl";
+
+        // Endpoint URL attribute provided for host changes ONLY
+        // Version updates require in-app service regeneration
+        private static string GATEWAY_VERSION = "1.127";
 
         #region Gateway Component Implementation
+
+        /// <summary>
+        /// Gets a value indicating whether gateway provider needs first and last name on credit card as two distinct fields.
+        /// </summary>
+        /// <value>
+        /// <c>true</c> if [split name on card]; otherwise, <c>false</c>.
+        /// </value>
+        public override bool SplitNameOnCard
+        {
+            get
+            {
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether the gateway requires the name on card for CC processing
+        /// </summary>
+        /// <value>
+        /// <c>true</c> if [name on card required]; otherwise, <c>false</c>.
+        /// </value>
+        public override bool PromptForNameOnCard( FinancialGateway financialGateway )
+        {
+            return GetAttributeValue( financialGateway, "PromptForName" ).AsBoolean();
+        }
+
+        /// <summary>
+        /// Prompts the name of for bank account.
+        /// </summary>
+        /// <param name="financialGateway">The financial gateway.</param>
+        /// <returns></returns>
+        public override bool PromptForBankAccountName( FinancialGateway financialGateway )
+        {
+            return GetAttributeValue( financialGateway, "PromptForBankAccountName" ).AsBoolean();
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether [address required].
+        /// </summary>
+        /// <value>
+        /// <c>true</c> if [address required]; otherwise, <c>false</c>.
+        /// </value>
+        public override bool PromptForBillingAddress( FinancialGateway financialGateway )
+        {
+            return GetAttributeValue( financialGateway, "PromptForAddress" ).AsBoolean();
+        }
 
         /// <summary>
         /// Determines if this gateway supports saved accounts of the type indicated by currencyType
@@ -119,64 +170,38 @@ namespace cc.newspring.CyberSource
                 return null;
             }
 
-            if ( origTransaction.FinancialPaymentDetail == null || origTransaction.FinancialPaymentDetail.CurrencyTypeValue == null )
-            {
-                errorMessage = "The transaction must have a payment detail and currency to process a refund/credit";
-                return null;
-            }
+            var financialGateway = origTransaction.FinancialGateway;
+            var request = GetMerchantInfo( financialGateway );
 
-            var creditCardTypeGuid = new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_CREDIT_CARD );
-            var achTypeGuid = new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_ACH );
-            var request = GetMerchantInfo( origTransaction.FinancialGateway );
-            var paymentDetail = origTransaction.FinancialPaymentDetail;
-
-            if ( paymentDetail.CurrencyTypeValue.Guid.Equals( creditCardTypeGuid ) )
+            request.ccCreditService = new CCCreditService
             {
-                request.ccCreditService = new CCCreditService
-                {
-                    run = "true",
-                    captureRequestID = origTransaction.TransactionCode
-                };
-            }
-            else if ( paymentDetail.CurrencyTypeValue.Guid.Equals( achTypeGuid ) )
-            {
-                request.ecCreditService = new ECCreditService
-                {
-                    run = "true",
-                    debitRequestID = origTransaction.TransactionCode
-                };
-            }
-            else
-            {
-                errorMessage = "Unsupported Currency Type Value";
-                return null;
-            }
+                run = "true",
+                captureRequestID = origTransaction.TransactionCode
+            };
 
             request.comments = comment;
             request.purchaseTotals = GetTotals();
             request.purchaseTotals.grandTotalAmount = amount.ToString();
-            var reply = SubmitTransaction( origTransaction.FinancialGateway, request );
 
-            if ( reply == null )
+            // Credit the transaction
+            ReplyMessage reply = SubmitTransaction( financialGateway, request, out errorMessage );
+            if ( reply != null && reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
             {
-                errorMessage = "Invalid response from the financial gateway.";
-                return null;
+                var transactionGuid = new Guid( reply.merchantReferenceCode );
+                var transaction = new FinancialTransaction
+                {
+                    Guid = transactionGuid,
+                    TransactionCode = reply.requestID,
+                    Summary = comment
+                };
+                return transaction;
+            }
+            else if ( string.IsNullOrEmpty( errorMessage ) )
+            {
+                errorMessage = string.Format( "Unable to credit this transaction.{0}", ProcessError( reply ) );
             }
 
-            if ( !reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
-            {
-                errorMessage = string.Format( "Your credit was not approved. {0}", ProcessError( reply ) );
-                return null;
-            }
-
-            var transactionGuid = new Guid( reply.merchantReferenceCode );
-            var transaction = new FinancialTransaction
-            {
-                Guid = transactionGuid,
-                TransactionCode = reply.requestID,
-                Summary = comment
-            };
-            return transaction;
+            return null;
         }
 
         /// <summary>
@@ -220,24 +245,18 @@ namespace cc.newspring.CyberSource
                 request.paySubscriptionCreateService.paymentRequestID = ( (ReferencePaymentInfo)paymentInfo ).TransactionCode;
             }
 
-            ReplyMessage reply = SubmitTransaction( financialGateway, request );
-            if ( reply != null )
+            // Authorize the transaction
+            ReplyMessage reply = SubmitTransaction( financialGateway, request, out errorMessage );
+            if ( reply != null && reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
             {
-                if ( reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
-                {
-                    var transactionGuid = new Guid( reply.merchantReferenceCode );
-                    var transaction = new FinancialTransaction { Guid = transactionGuid };
-                    transaction.TransactionCode = reply.requestID;
-                    return transaction;
-                }
-                else
-                {
-                    errorMessage = string.Format( "Your order was not approved.{0}", ProcessError( reply ) );
-                }
+                var transactionGuid = new Guid( reply.merchantReferenceCode );
+                var transaction = new FinancialTransaction { Guid = transactionGuid };
+                transaction.TransactionCode = reply.requestID;
+                return transaction;
             }
-            else
+            else if ( string.IsNullOrEmpty( errorMessage ) )
             {
-                errorMessage = "Invalid response from the financial gateway.";
+                errorMessage = string.Format( "Unable to authorize this transaction.{0}", ProcessError( reply ) );
             }
 
             return null;
@@ -263,7 +282,7 @@ namespace cc.newspring.CyberSource
             request.billTo = GetBillTo( paymentInfo );
             request.item = GetItems( paymentInfo );
 
-            if ( paymentInfo.CurrencyTypeValue.Guid.Equals( new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_ACH ) ) )
+            if ( !paymentInfo.CurrencyTypeValue.Guid.Equals( new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_CREDIT_CARD ) ) )
             {
                 request.ecDebitService = new ECDebitService();
                 request.ecDebitService.commerceIndicator = "internet";
@@ -278,27 +297,18 @@ namespace cc.newspring.CyberSource
                 request.ccCaptureService.run = "true";
             }
 
-            ReplyMessage reply = SubmitTransaction( financialGateway, request );
-            if ( reply != null )
+            // Charge the transaction
+            ReplyMessage reply = SubmitTransaction( financialGateway, request, out errorMessage );
+            if ( reply != null && reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
             {
-                if ( reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
-                {
-                    var transactionGuid = new Guid( reply.merchantReferenceCode );
-                    var transaction = new FinancialTransaction { Guid = transactionGuid };
-                    transaction.TransactionCode = reply.requestID;
-                    return transaction;
-                }
-                else
-                {
-                    bool authorizationReversed = ReverseAuthorization( financialGateway, reply.requestID, request.purchaseTotals.grandTotalAmount );
-
-                    // add a message if the authorization isn't reversed?
-                    errorMessage = string.Format( "Your order was not approved. {0}", ProcessError( reply ) );
-                }
+                var transactionGuid = new Guid( reply.merchantReferenceCode );
+                var transaction = new FinancialTransaction { Guid = transactionGuid };
+                transaction.TransactionCode = reply.requestID;
+                return transaction;
             }
-            else
+            else if ( string.IsNullOrEmpty( errorMessage ) )
             {
-                errorMessage = "Invalid response from the financial gateway.";
+                errorMessage = string.Format( "Unable to process this order.{0}", ProcessError( reply ) );
             }
 
             return null;
@@ -347,28 +357,22 @@ namespace cc.newspring.CyberSource
                 request.paySubscriptionCreateService.paymentRequestID = ( (ReferencePaymentInfo)paymentInfo ).TransactionCode;
             }
 
-            ReplyMessage reply = SubmitTransaction( financialGateway, request );
-            if ( reply != null )
+            // Schedule the payment
+            ReplyMessage reply = SubmitTransaction( financialGateway, request, out errorMessage );
+            if ( reply != null && reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
             {
-                if ( reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
-                {
-                    var transactionGuid = new Guid( reply.merchantReferenceCode );
-                    var scheduledTransaction = new FinancialScheduledTransaction { Guid = transactionGuid };
-                    scheduledTransaction.TransactionCode = reply.paySubscriptionCreateReply.subscriptionID;
-                    scheduledTransaction.GatewayScheduleId = reply.paySubscriptionCreateReply.subscriptionID;
-                    scheduledTransaction.FinancialGateway = financialGateway;
-                    scheduledTransaction.FinancialGatewayId = financialGateway.Id;
-                    GetScheduledPaymentStatus( scheduledTransaction, out errorMessage );
-                    return scheduledTransaction;
-                }
-                else
-                {
-                    errorMessage = string.Format( "Your order was not approved.{0}", ProcessError( reply ) );
-                }
+                var transactionGuid = new Guid( reply.merchantReferenceCode );
+                var scheduledTransaction = new FinancialScheduledTransaction { Guid = transactionGuid };
+                scheduledTransaction.TransactionCode = reply.paySubscriptionCreateReply.subscriptionID;
+                scheduledTransaction.GatewayScheduleId = reply.paySubscriptionCreateReply.subscriptionID;
+                scheduledTransaction.FinancialGateway = financialGateway;
+                scheduledTransaction.FinancialGatewayId = financialGateway.Id;
+                GetScheduledPaymentStatus( scheduledTransaction, out errorMessage );
+                return scheduledTransaction;
             }
-            else
+            else if ( string.IsNullOrEmpty( errorMessage ) )
             {
-                errorMessage = "Invalid response from the financial gateway.";
+                errorMessage = string.Format( "Your order was not approved.{0}", ProcessError( reply ) );
             }
 
             return null;
@@ -417,7 +421,7 @@ namespace cc.newspring.CyberSource
             request.item = GetItems( paymentInfo );
 
             request.subscription = new Subscription();
-            if ( paymentInfo.CurrencyTypeValue.Guid.Equals( new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_ACH ) ) )
+            if ( !paymentInfo.CurrencyTypeValue.Guid.Equals( new Guid( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_CREDIT_CARD ) ) )
             {
                 request.subscription.paymentMethod = "check";
             }
@@ -426,21 +430,15 @@ namespace cc.newspring.CyberSource
                 request.subscription.paymentMethod = "credit card";
             }
 
-            ReplyMessage reply = SubmitTransaction( financialGateway, request );
-            if ( reply != null )
+            // Update the schedule
+            ReplyMessage reply = SubmitTransaction( financialGateway, request, out errorMessage );
+            if ( reply != null && reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
             {
-                if ( reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
-                {
-                    return true;
-                }
-                else
-                {
-                    errorMessage = string.Format( "Unable to update this transaction. {0}", ProcessError( reply ) );
-                }
+                return true;
             }
-            else
+            else if ( string.IsNullOrEmpty( errorMessage ) )
             {
-                errorMessage = "Invalid response from the financial gateway.";
+                errorMessage = string.Format( "Unable to update this transaction. {0}", ProcessError( reply ) );
             }
 
             return false;
@@ -463,21 +461,15 @@ namespace cc.newspring.CyberSource
             request.recurringSubscriptionInfo.status = "cancel";
             request.paySubscriptionUpdateService.run = "true";
 
-            ReplyMessage reply = SubmitTransaction( financialGateway, request );
-            if ( reply != null )
+            // Cancel the payment
+            ReplyMessage reply = SubmitTransaction( financialGateway, request, out errorMessage );
+            if ( reply != null && reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
             {
-                if ( reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
-                {
-                    return true;
-                }
-                else
-                {
-                    errorMessage = string.Format( "Unable to cancel this transaction. {0}", ProcessError( reply ) );
-                }
+                return true;
             }
-            else
+            else if ( string.IsNullOrEmpty( errorMessage ) )
             {
-                errorMessage = "Invalid response from the financial gateway.";
+                errorMessage = string.Format( "Unable to cancel this transaction. {0}", ProcessError( reply ) );
             }
 
             return false;
@@ -499,21 +491,21 @@ namespace cc.newspring.CyberSource
             verifyRequest.recurringSubscriptionInfo = new RecurringSubscriptionInfo();
             verifyRequest.recurringSubscriptionInfo.subscriptionID = transaction.TransactionCode;
 
-            ReplyMessage verifyReply = SubmitTransaction( financialGateway, verifyRequest );
-            if ( verifyReply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
+            // Get the payment status
+            ReplyMessage reply = SubmitTransaction( financialGateway, verifyRequest, out errorMessage );
+            if ( reply != null && reply.reasonCode.Equals( GATEWAY_RESPONSE_SUCCESS ) )
             {
-                transaction.IsActive = verifyReply.paySubscriptionRetrieveReply.status.ToUpper() == "CURRENT";
-                var startDate = GetDate( verifyReply.paySubscriptionRetrieveReply.startDate );
+                transaction.IsActive = reply.paySubscriptionRetrieveReply.status.ToUpper() == "CURRENT";
+                var startDate = GetDate( reply.paySubscriptionRetrieveReply.startDate );
                 transaction.StartDate = startDate ?? transaction.StartDate;
-                transaction.NextPaymentDate = NextPaymentDate( startDate, verifyReply.paySubscriptionRetrieveReply.frequency ) ?? transaction.NextPaymentDate;
-                transaction.NumberOfPayments = verifyReply.paySubscriptionRetrieveReply.totalPayments.AsIntegerOrNull() ?? transaction.NumberOfPayments;
+                transaction.NextPaymentDate = NextPaymentDate( startDate, reply.paySubscriptionRetrieveReply.frequency ) ?? transaction.NextPaymentDate;
+                transaction.NumberOfPayments = reply.paySubscriptionRetrieveReply.totalPayments.AsIntegerOrNull() ?? transaction.NumberOfPayments;
                 transaction.LastStatusUpdateDateTime = DateTime.Now;
-
                 return true;
             }
-            else
+            else if ( string.IsNullOrEmpty( errorMessage ) )
             {
-                errorMessage = ProcessError( verifyReply );
+                errorMessage = ProcessError( reply );
             }
 
             return false;
@@ -598,12 +590,13 @@ namespace cc.newspring.CyberSource
             request.paySubscriptionCreateService.run = "true";
             request.paySubscriptionCreateService.paymentRequestID = transaction.TransactionCode;
 
-            ReplyMessage reply = SubmitTransaction( financialGateway, request );
-            if ( reply.reasonCode == GATEWAY_RESPONSE_SUCCESS )
+            // Get the reference code
+            ReplyMessage reply = SubmitTransaction( financialGateway, request, out errorMessage );
+            if ( reply != null && reply.reasonCode == GATEWAY_RESPONSE_SUCCESS )
             {
                 return reply.paySubscriptionCreateReply.subscriptionID;
             }
-            else
+            else if ( string.IsNullOrEmpty( errorMessage ) )
             {
                 errorMessage = ProcessError( reply );
             }
@@ -632,35 +625,20 @@ namespace cc.newspring.CyberSource
         /// </summary>
         /// <param name="request">The request.</param>
         /// <returns></returns>
-        private ReplyMessage SubmitTransaction( FinancialGateway financialGateway, RequestMessage request )
+        private ReplyMessage SubmitTransaction( FinancialGateway financialGateway, RequestMessage request, out string errorMessage )
         {
             ReplyMessage reply = new ReplyMessage();
-            string merchantID = GetAttributeValue( financialGateway, "MerchantID" );
-            string liveTransactionkey = GetAttributeValue( financialGateway, "LiveTransactionKey" );
-            string testTransactionkey = GetAttributeValue( financialGateway, "TestTransactionKey" );
-            bool useLiveMode = GetAttributeValue( financialGateway, "UseLiveMode" ).AsBoolean();
+            TransactionProcessorClient client = GetProxyClient( financialGateway, out errorMessage );
 
-            BasicHttpBinding binding = new BasicHttpBinding();
-            binding.Name = "ITransactionProcessor";
-            binding.MaxBufferSize = 2147483647;
-            binding.MaxBufferPoolSize = 2147483647;
-            binding.MaxReceivedMessageSize = 2147483647;
-            binding.ReaderQuotas.MaxDepth = 2147483647;
-            binding.ReaderQuotas.MaxArrayLength = 2147483647;
-            binding.ReaderQuotas.MaxBytesPerRead = 2147483647;
-            binding.ReaderQuotas.MaxStringContentLength = 2147483647;
-            binding.Security.Mode = BasicHttpSecurityMode.TransportWithMessageCredential;
-            EndpointAddress address = new EndpointAddress( useLiveMode ? LIVE_GATEWAY_URL : TEST_GATEWAY_URL );
-
-            var proxy = new TransactionProcessorClient( binding, address );
-            proxy.ClientCredentials.UserName.UserName = merchantID;
-            proxy.ClientCredentials.UserName.Password = useLiveMode ? liveTransactionkey : testTransactionkey;
-            proxy.Endpoint.Address = address;
-            proxy.Endpoint.Binding = binding;
+            // Error message already set, return
+            if ( client == null )
+            {
+                return null;
+            }
 
             try
             {
-                reply = proxy.runTransaction( request );
+                reply = client.runTransaction( request );
                 return reply;
             }
             catch ( TimeoutException e )
@@ -690,6 +668,12 @@ namespace cc.newspring.CyberSource
         /// <returns></returns>
         private string ProcessError( ReplyMessage reply )
         {
+            // Make sure the reply is valid
+            if ( reply == null )
+            {
+                return "Invalid response from the paymnent gateway.";
+            }
+
             int reasonCode = int.Parse( reply.reasonCode );
             switch ( reasonCode )
             {
@@ -704,10 +688,10 @@ namespace cc.newspring.CyberSource
                     return "\nOnly a partial amount of this transaction was approved.";
                 // General system failure
                 case 150:
-                    return "\nThe payment processor did not process your payment.";
+                    return string.Format( "\nThe payment processor did not process your payment. {0}", reply.additionalData );
                 // System timeout
                 case 151:
-                    return "\nThe payment request timed out.";
+                    return string.Format( "\nThe payment request timed out. {0}", reply.additionalData ); ;
                 // Service request timed out
                 case 152:
                     return "\nThe payment service timed out.";
@@ -764,7 +748,7 @@ namespace cc.newspring.CyberSource
                     return "\nThe payment request was received but has not yet been processed.";
                 // Any others not identified
                 default:
-                    return "\nYour payment was not processed.  Please check your payment details.";
+                    return string.Format( "\nYour payment was not processed. {0}", reply.additionalData );
             }
         }
 
@@ -803,6 +787,58 @@ namespace cc.newspring.CyberSource
         }
 
         /// <summary>
+        /// Gets the proxy client.
+        /// </summary>
+        /// <param name="financialGateway">The financial gateway.</param>
+        /// <returns></returns>
+        private TransactionProcessorClient GetProxyClient( FinancialGateway financialGateway, out string errorMessage )
+        {
+            errorMessage = string.Empty;
+            string merchantID = GetAttributeValue( financialGateway, "MerchantID" );
+            string transactionkey = GetAttributeValue( financialGateway, "TransactionKey" );
+
+            string gatewayEndpoint = null;
+            if ( GetAttributeValue( financialGateway, "Mode" ).Equals( "Live", StringComparison.CurrentCultureIgnoreCase ) )
+            {
+                gatewayEndpoint = GetAttributeValue( financialGateway, "LiveGatewayURL" );
+            }
+            else
+            {
+                gatewayEndpoint = GetAttributeValue( financialGateway, "TestGatewayURL" );
+            }
+
+            EndpointAddress address = null;
+            if ( !string.IsNullOrEmpty( gatewayEndpoint ) )
+            {
+                gatewayEndpoint = gatewayEndpoint.EnsureTrailingForwardslash();
+                address = new EndpointAddress( string.Format( "{0}CyberSourceTransaction_{1}", gatewayEndpoint, GATEWAY_VERSION ) );
+            }
+            else
+            {
+                errorMessage = "Financial gateway is not configured with a valid endpoint.";
+                return null;
+            }
+
+            BasicHttpBinding binding = new BasicHttpBinding();
+            binding.Name = "ITransactionProcessor";
+            binding.MaxBufferSize = 2147483647;
+            binding.MaxBufferPoolSize = 2147483647;
+            binding.MaxReceivedMessageSize = 2147483647;
+            binding.ReaderQuotas.MaxDepth = 2147483647;
+            binding.ReaderQuotas.MaxArrayLength = 2147483647;
+            binding.ReaderQuotas.MaxBytesPerRead = 2147483647;
+            binding.ReaderQuotas.MaxStringContentLength = 2147483647;
+            binding.Security.Mode = BasicHttpSecurityMode.TransportWithMessageCredential;
+
+            var proxy = new TransactionProcessorClient( binding, address );
+            proxy.ClientCredentials.UserName.UserName = merchantID;
+            proxy.ClientCredentials.UserName.Password = transactionkey;
+            proxy.Endpoint.Address = address;
+            proxy.Endpoint.Binding = binding;
+            return proxy;
+        }
+
+        /// <summary>
         /// Gets the payment information.
         /// </summary>
         /// <returns></returns>
@@ -835,31 +871,6 @@ namespace cc.newspring.CyberSource
         }
 
         /// <summary>
-        /// Reverses the authorization.
-        /// </summary>
-        /// <param name="financialGateway">The financial gateway.</param>
-        /// <param name="originalRequest">The original request.</param>
-        /// <returns></returns>
-        private bool ReverseAuthorization( FinancialGateway financialGateway, string requestID, string totalAmount )
-        {
-            RequestMessage request = GetMerchantInfo( financialGateway );
-            request.ccAuthReversalService = new CCAuthReversalService();
-            request.ccAuthReversalService.authRequestID = requestID;
-            request.ccAuthReversalService.run = "true";
-            request.purchaseTotals = new PurchaseTotals();
-            request.purchaseTotals.currency = "USD";
-            request.purchaseTotals.grandTotalAmount = totalAmount;
-
-            ReplyMessage reply = SubmitTransaction( financialGateway, request );
-            if ( reply.reasonCode == GATEWAY_RESPONSE_SUCCESS )
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
         /// Gets the billing details from user submitted payment info.
         /// </summary>
         /// <param name="paymentInfo">The payment information.</param>
@@ -873,8 +884,6 @@ namespace cc.newspring.CyberSource
                 paymentInfo.Phone = string.Empty;
             }
 
-            billingInfo.firstName = paymentInfo.FirstName;
-            billingInfo.lastName = paymentInfo.LastName;
             if ( paymentInfo is CreditCardPaymentInfo )
             {
                 var cc = paymentInfo as CreditCardPaymentInfo;
@@ -882,13 +891,6 @@ namespace cc.newspring.CyberSource
                 billingInfo.city = cc.BillingCity.Left( 50 );
                 billingInfo.state = cc.BillingState.Left( 2 );
                 billingInfo.postalCode = cc.BillingPostalCode.Left( 10 );
-
-                var nameOnCard = cc.NameOnCard.Split( ' ' );
-                if ( nameOnCard != null && nameOnCard.Count() >= 2 )
-                {
-                    billingInfo.firstName = nameOnCard.First();
-                    billingInfo.lastName = nameOnCard.Last();
-                }
             }
             else
             {
@@ -904,6 +906,8 @@ namespace cc.newspring.CyberSource
                 billingInfo.postalCode = zip;
             }
 
+            billingInfo.firstName = paymentInfo.FirstName.Left( 50 );       // up to 50 chars
+            billingInfo.lastName = paymentInfo.LastName.Left( 60 );         // up to 60 chars
             billingInfo.email = paymentInfo.Email;                          // up to 255 chars
             billingInfo.phoneNumber = paymentInfo.Phone.Left( 15 );         // up to 15 chars
 
@@ -926,23 +930,8 @@ namespace cc.newspring.CyberSource
         {
             BillTo billingInfo = new BillTo();
             billingInfo.customerID = transaction.AuthorizedPersonAlias.Id.ToString();
-
-            // set the default name in case there isn't an encrypted one
             billingInfo.firstName = transaction.AuthorizedPersonAlias.Person.FirstName.Left( 50 );       // up to 50 chars
             billingInfo.lastName = transaction.AuthorizedPersonAlias.Person.LastName.Left( 50 );         // up to 60 chars
-
-            // check for an encrypted name that would signify a different name on card
-            var nameOnCardEncrypted = transaction.FinancialPaymentDetail.NameOnCardEncrypted.ToStringSafe();
-            if ( nameOnCardEncrypted != null )
-            {
-                var nameOnCard = Encryption.DecryptString( nameOnCardEncrypted );
-                if ( nameOnCard != null && nameOnCard.Split( ' ' ).Count() >= 2 )
-                {
-                    billingInfo.firstName = nameOnCard.Split( ' ' ).First();
-                    billingInfo.lastName = nameOnCard.Split( ' ' ).Last();
-                }
-            }
-
             billingInfo.email = transaction.AuthorizedPersonAlias.Person.Email.Left( 255 );              // up to 255 chars
             billingInfo.ipAddress = Dns.GetHostEntry( Dns.GetHostName() )
                 .AddressList.FirstOrDefault( ip => ip.AddressFamily == AddressFamily.InterNetwork ).ToString();
