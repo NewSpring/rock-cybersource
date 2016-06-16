@@ -308,6 +308,8 @@ namespace cc.newspring.CyberSource
             }
             else if ( string.IsNullOrEmpty( errorMessage ) )
             {
+                bool authorizationReversed = ReverseAuthorization( financialGateway, reply.requestID, request.purchaseTotals.grandTotalAmount, out errorMessage );
+
                 errorMessage = string.Format( "Unable to process this order.{0}", ProcessError( reply ) );
             }
 
@@ -614,6 +616,31 @@ namespace cc.newspring.CyberSource
         {
             errorMessage = string.Empty;
             return scheduledTransaction.TransactionCode;
+        }
+
+        /// <summary>
+        /// Reverses the authorization.
+        /// </summary>
+        /// <param name="financialGateway">The financial gateway.</param>
+        /// <param name="originalRequest">The original request.</param>
+        /// <returns></returns>
+        private bool ReverseAuthorization( FinancialGateway financialGateway, string requestID, string totalAmount, out string errorMessage )
+        {
+            RequestMessage request = GetMerchantInfo( financialGateway );
+            request.ccAuthReversalService = new CCAuthReversalService();
+            request.ccAuthReversalService.authRequestID = requestID;
+            request.ccAuthReversalService.run = "true";
+            request.purchaseTotals = new PurchaseTotals();
+            request.purchaseTotals.currency = "USD";
+            request.purchaseTotals.grandTotalAmount = totalAmount;
+
+            ReplyMessage reply = SubmitTransaction( financialGateway, request, out errorMessage );
+            if ( reply.reasonCode == GATEWAY_RESPONSE_SUCCESS )
+            {
+                return true;
+            }
+
+            return false;
         }
 
         #endregion Gateway Component Implementation
